@@ -13,8 +13,9 @@ variable "timezone"             { type = string }
 variable "depends_on_id"        { type = string; default = "" }
 
 locals {
-  etc_dir     = "${var.data_dir}/etc"
-  dnsmasq_dir = "${var.data_dir}/dnsmasq.d"
+  etc_dir      = "${var.data_dir}/etc"
+  dnsmasq_dir  = "${var.data_dir}/dnsmasq.d"
+  unbound_dir  = "${var.data_dir}/unbound"
 }
 
 resource "null_resource" "pihole_dirs" {
@@ -27,7 +28,7 @@ resource "null_resource" "pihole_dirs" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo mkdir -p ${local.etc_dir} ${local.dnsmasq_dir}",
+      "sudo mkdir -p ${local.etc_dir} ${local.dnsmasq_dir} ${local.unbound_dir}",
       "sudo chown -R $USER:$USER ${var.data_dir}",
     ]
   }
@@ -43,7 +44,8 @@ resource "null_resource" "unbound_config" {
     private_key = file(pathexpand(var.ssh_private_key_path))
   }
 
-  # Write Unbound config into dnsmasq.d so it persists across container recreates
+  # Write Unbound config to host-mounted path — persists across container recreates.
+  # tls-cert-bundle is required for hostname pinning (#cloudflare-dns.com) to work.
   provisioner "file" {
     content     = <<-EOF
       server:
@@ -51,6 +53,7 @@ resource "null_resource" "unbound_config" {
           do-ip4: yes
           do-ip6: no
           auto-trust-anchor-file: "/var/lib/unbound/root.key"
+          tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
           access-control: 0.0.0.0/0 allow
           access-control: 127.0.0.1 allow
           cache-min-ttl: 300
@@ -69,7 +72,6 @@ resource "null_resource" "unbound_config" {
           prefetch-key: yes
           num-threads: 1
           so-rcvbuf: 1m
-          # DNS rebinding protection
           private-address: 192.168.0.0/16
           private-address: 169.254.0.0/16
           private-address: 172.16.0.0/12
@@ -84,7 +86,11 @@ resource "null_resource" "unbound_config" {
           forward-addr: 1.1.1.1@853#cloudflare-dns.com
           forward-addr: 1.0.0.1@853#cloudflare-dns.com
     EOF
-    destination = "${local.dnsmasq_dir}/unbound.conf.bak"
+    destination = "/tmp/unbound.conf"
+  }
+
+  provisioner "remote-exec" {
+    inline = ["mv /tmp/unbound.conf ${local.unbound_dir}/unbound.conf"]
   }
 }
 
@@ -118,6 +124,9 @@ resource "null_resource" "pihole_compose" {
             - type: bind
               source: ${local.dnsmasq_dir}
               target: /etc/dnsmasq.d
+            - type: bind
+              source: ${local.unbound_dir}/unbound.conf
+              target: /etc/unbound/unbound.conf
           cap_add:
             - NET_ADMIN
             - SYS_NICE
@@ -172,17 +181,6 @@ resource "null_resource" "pihole_start" {
       "  if [ \"$i\" = '30' ]; then echo 'ERROR: Pi-hole did not become healthy in time.'; exit 1; fi",
       "  sleep 5",
       "done",
-
-      # Fix Unbound config inside container (copy our config over the image default)
-      "docker exec pihole-unbound sh -c 'if [ -f /etc/unbound/unbound.conf ]; then",
-      "  grep -q \"forward-zone\" /etc/unbound/unbound.conf || cat >> /etc/unbound/unbound.conf << UNBOUNDEOF",
-      "forward-zone:",
-      "    name: \".\"",
-      "    forward-addr: 1.1.1.1",
-      "    forward-addr: 1.0.0.1",
-      "UNBOUNDEOF",
-      "  kill -HUP \\$(pgrep unbound) 2>/dev/null || true",
-      "fi'",
 
       "echo 'Pi-hole + Unbound stack is running.'"
     ]
