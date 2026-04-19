@@ -4,13 +4,18 @@ output "pihole_ui" {
 }
 
 output "vault_ui" {
-  description = "Vault web UI"
+  description = "Vault web UI (HTTPS with self-signed cert)"
   value       = module.vault.vault_ui
 }
 
 output "vault_keys_note" {
-  description = "Where to find Vault unseal keys"
+  description = "Vault unseal key storage"
   value       = module.vault.vault_keys_note
+}
+
+output "pihole_password_note" {
+  description = "How to retrieve Pi-hole admin password"
+  value       = "sudo systemd-creds decrypt /etc/pihole/admin-password.cred -"
 }
 
 output "dns_server" {
@@ -19,6 +24,6 @@ output "dns_server" {
 }
 
 output "dns_chain" {
-  description = "DNS resolution chain"
-  value       = "LAN → Pi-hole (${var.server_host}:53) → Unbound (:5353) → Warp tunnel → Cloudflare 1.1.1.1"
+  description = "DNS resolution chain (double-encrypted)"
+  value       = "LAN → Pi-hole (${var.server_host}:53) → Unbound :5353 [DoT/TLS] → Warp tunnel → Cloudflare 1.1.1.1:853"
 }

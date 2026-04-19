@@ -8,7 +8,7 @@ terraform {
   }
 }
 
-# ── Bootstrap: ensure target user exists with sudo + docker rights ─────────────
+# ── Bootstrap: verify SSH access ───────────────────────────────────────────────
 resource "null_resource" "bootstrap" {
   connection {
     type        = "ssh"
@@ -20,8 +20,7 @@ resource "null_resource" "bootstrap" {
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "echo 'Connected to $(hostname) as $(whoami)'",
-      # Ensure sudo is available and passwordless for this run
+      "echo 'Connected to '$(hostname)' as '$(whoami)",
       "sudo true",
     ]
   }
@@ -33,6 +32,28 @@ module "docker_ce" {
   server_host          = var.server_host
   server_user          = var.server_user
   ssh_private_key_path = var.ssh_private_key_path
+
+  depends_on = [null_resource.bootstrap]
+}
+
+# ── Module: SSH hardening ──────────────────────────────────────────────────────
+module "ssh_hardening" {
+  source               = "./modules/ssh-hardening"
+  server_host          = var.server_host
+  server_user          = var.server_user
+  ssh_private_key_path = var.ssh_private_key_path
+
+  depends_on = [null_resource.bootstrap]
+}
+
+# ── Module: Firewall (UFW) ─────────────────────────────────────────────────────
+module "firewall" {
+  source               = "./modules/firewall"
+  server_host          = var.server_host
+  server_user          = var.server_user
+  ssh_private_key_path = var.ssh_private_key_path
+  lan_subnet           = var.lan_subnet
+  mgmt_subnet          = var.mgmt_subnet
 
   depends_on = [null_resource.bootstrap]
 }
@@ -49,7 +70,7 @@ module "warp_cli" {
   depends_on = [module.docker_ce]
 }
 
-# ── Module: Pi-hole + Unbound ──────────────────────────────────────────────────
+# ── Module: Pi-hole + Unbound (with DoT) ──────────────────────────────────────
 module "pihole_unbound" {
   source               = "./modules/pihole-unbound"
   server_host          = var.server_host
@@ -60,11 +81,10 @@ module "pihole_unbound" {
   timezone             = var.timezone
   depends_on_id        = module.warp_cli.done
 
-  # Pi-hole must come after Docker and Warp (Warp tunnel routes DNS queries out)
   depends_on = [module.docker_ce, module.warp_cli]
 }
 
-# ── Module: Vault ──────────────────────────────────────────────────────────────
+# ── Module: Vault (TLS + TPM2 auto-unseal + scoped policies) ──────────────────
 module "vault" {
   source               = "./modules/vault"
   server_host          = var.server_host

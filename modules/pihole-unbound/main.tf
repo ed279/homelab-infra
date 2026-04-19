@@ -61,9 +61,15 @@ resource "null_resource" "unbound_config" {
           harden-glue: yes
           harden-dnssec-stripped: yes
           harden-referral-path: yes
+          harden-below-nxdomain: yes
+          harden-short-bufsize: yes
+          harden-large-queries: yes
+          use-caps-for-id: yes
           prefetch: yes
+          prefetch-key: yes
           num-threads: 1
           so-rcvbuf: 1m
+          # DNS rebinding protection
           private-address: 192.168.0.0/16
           private-address: 169.254.0.0/16
           private-address: 172.16.0.0/12
@@ -71,11 +77,12 @@ resource "null_resource" "unbound_config" {
           private-address: fd00::/8
           private-address: fe80::/10
 
-      # Forward all queries through Warp tunnel to Cloudflare
+      # DNS-over-TLS to Cloudflare — double-encrypted (Warp tunnel + DoT)
       forward-zone:
           name: "."
-          forward-addr: 1.1.1.1
-          forward-addr: 1.0.0.1
+          forward-tls-upstream: yes
+          forward-addr: 1.1.1.1@853#cloudflare-dns.com
+          forward-addr: 1.0.0.1@853#cloudflare-dns.com
     EOF
     destination = "${local.dnsmasq_dir}/unbound.conf.bak"
   }
@@ -195,12 +202,15 @@ resource "null_resource" "pihole_password" {
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "NEW_PASS=$(openssl rand -base64 16)",
+      # Generate password in memory — never written to disk
+      "NEW_PASS=$(openssl rand -base64 20 | tr -dc 'A-Za-z0-9' | head -c 24)",
       "docker exec pihole-unbound pihole setpassword \"$NEW_PASS\"",
-      # Write to a temp file on the server so Terraform output can capture it
-      "echo $NEW_PASS | sudo tee /DATA/AppData/.pihole_admin_pass > /dev/null",
-      "sudo chmod 600 /DATA/AppData/.pihole_admin_pass",
-      "echo 'Pi-hole password set and saved to /DATA/AppData/.pihole_admin_pass'"
+      # Encrypt and store with systemd-creds/TPM2 — no plaintext on disk
+      "sudo mkdir -p /etc/pihole",
+      "echo -n \"$NEW_PASS\" | sudo systemd-creds encrypt --name=pihole-password --with-key=tpm2 - /etc/pihole/admin-password.cred",
+      "sudo chmod 600 /etc/pihole/admin-password.cred",
+      "echo 'Pi-hole password set and TPM2-encrypted at /etc/pihole/admin-password.cred'",
+      "echo 'Retrieve with: sudo systemd-creds decrypt /etc/pihole/admin-password.cred -'"
     ]
   }
 }

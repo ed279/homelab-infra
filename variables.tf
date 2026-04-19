@@ -39,6 +39,12 @@ variable "pihole_image" {
   default     = "bigbeartechworld/big-bear-pihole-unbound:2026.04.0"
 }
 
+variable "mgmt_subnet" {
+  description = "Optional management/WiFi VLAN subnet that also needs SSH access (e.g. 10.0.253.0/24)"
+  type        = string
+  default     = ""
+}
+
 variable "vault_data_dir" {
   description = "Host path for Vault persistent data"
   type        = string

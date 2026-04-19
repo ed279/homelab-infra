@@ -7,3 +7,4 @@ timezone             = "America/Los_Angeles"
 lan_subnet           = "10.0.9.0/24"
 pihole_data_dir      = "/DATA/AppData/pihole-unbound"
 vault_data_dir       = "/DATA/AppData/vault"
+mgmt_subnet          = "10.0.253.0/24"   # WiFi/management VLAN — also gets SSH + service access
