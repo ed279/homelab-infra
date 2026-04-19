@@ -54,6 +54,7 @@ module "firewall" {
   ssh_private_key_path = var.ssh_private_key_path
   lan_subnet           = var.lan_subnet
   mgmt_subnet          = var.mgmt_subnet
+  netbird_subnet       = var.netbird_subnet
 
   depends_on = [null_resource.bootstrap]
 }
@@ -65,6 +66,7 @@ module "warp_cli" {
   server_user          = var.server_user
   ssh_private_key_path = var.ssh_private_key_path
   lan_subnet           = var.lan_subnet
+  netbird_subnet       = var.netbird_subnet
   depends_on_id        = module.docker_ce.done
 
   depends_on = [module.docker_ce]

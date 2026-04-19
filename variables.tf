@@ -45,6 +45,12 @@ variable "mgmt_subnet" {
   default     = ""
 }
 
+variable "netbird_subnet" {
+  description = "NetBird mesh VPN subnet. Excluded from Warp tunnel, allowed through UFW. Default covers all NetBird allocations."
+  type        = string
+  default     = "100.64.0.0/10"
+}
+
 variable "vault_data_dir" {
   description = "Host path for Vault persistent data"
   type        = string

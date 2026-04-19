@@ -8,6 +8,7 @@ variable "server_host"          { type = string }
 variable "server_user"          { type = string }
 variable "ssh_private_key_path" { type = string }
 variable "lan_subnet"           { type = string }
+variable "netbird_subnet"       { type = string; default = "100.64.0.0/10" }
 variable "depends_on_id"        { type = string; default = "" }
 
 resource "null_resource" "warp_install" {
@@ -58,12 +59,13 @@ resource "null_resource" "warp_configure" {
       # Set tunnel_only mode (no DNS proxy — Pi-hole owns port 53)
       "warp-cli --accept-tos mode tunnel_only",
 
-      # Add LAN and private ranges to split tunnel excludes
-      # so SSH and local traffic bypasses the tunnel
+      # Add LAN, private ranges, and NetBird mesh to split tunnel excludes
+      # so SSH, local traffic, and mesh VPN traffic bypass the Warp tunnel
       "warp-cli --accept-tos tunnel ip add-range ${var.lan_subnet} 2>/dev/null || true",
       "warp-cli --accept-tos tunnel ip add-range 127.0.0.0/8 2>/dev/null || true",
       "warp-cli --accept-tos tunnel ip add-range 192.168.0.0/16 2>/dev/null || true",
       "warp-cli --accept-tos tunnel ip add-range 172.16.0.0/12 2>/dev/null || true",
+      "warp-cli --accept-tos tunnel ip add-range ${var.netbird_subnet} 2>/dev/null || true",
 
       # Connect
       "warp-cli --accept-tos connect",
