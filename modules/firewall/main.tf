@@ -61,6 +61,12 @@ resource "null_resource" "ufw" {
       "sudo ufw allow from ${var.netbird_subnet} to any port 80 proto tcp comment 'Pi-hole HTTP from NetBird'",
       "sudo ufw allow from ${var.netbird_subnet} to any port 443 proto tcp comment 'Pi-hole HTTPS from NetBird'",
 
+      # NetBird WireGuard — must allow UDP 51820 from anywhere so ICE P2P handshakes succeed.
+      # WireGuard traffic is encrypted; blocking this breaks the mesh even if the mesh IP range is excluded from WARP.
+      "sudo ufw allow 51820/udp comment 'NetBird WireGuard'",
+      # NetBird built-in SSH server (port 22022 on the mesh interface)
+      "sudo ufw allow from ${var.netbird_subnet} to any port 22022 proto tcp comment 'NetBird SSH server'",
+
       # Loopback always allowed
       "sudo ufw allow in on lo",
 
